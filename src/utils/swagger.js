@@ -10,8 +10,15 @@ const options = {
             description: 'Multi-tenant project and task management backend'
         },
         servers: [
-            { url: 'http://localhost:3000', description: 'Local Docker' }
-        ],
+    {
+        url: 'https://taskflow-backend-assignment-production.up.railway.app',
+        description: 'Production - Railway'
+    },
+    {
+        url: 'http://localhost:3000',
+        description: 'Local Docker'
+    }
+]
         components: {
             securitySchemes: {
                 bearerAuth: {
