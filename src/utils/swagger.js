@@ -18,7 +18,7 @@ const options = {
         url: 'http://localhost:3000',
         description: 'Local Docker'
     }
-]
+],
         components: {
             securitySchemes: {
                 bearerAuth: {
