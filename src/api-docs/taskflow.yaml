@@ -1,0 +1,491 @@
+openapi: 3.0.0
+info:
+  title: TaskFlow API
+  version: 1.0.0
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    Error:
+      type: object
+      required: [error, code, details]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+    Project:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        organizationId: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+    Task:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        projectId: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [todo, in_progress, review, done]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        dueDate:
+          type: string
+          format: date-time
+          nullable: true
+
+paths:
+  /health:
+    get:
+      tags: [System]
+      summary: Health check
+      responses:
+        '200':
+          description: API and database are available
+
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a user and create an organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password, organizationName, organizationSlug]
+              properties:
+                name: { type: string, example: Jane Admin }
+                email: { type: string, format: email, example: jane@example.com }
+                password: { type: string, example: Password123! }
+                organizationName: { type: string, example: Jane Labs }
+                organizationSlug: { type: string, example: jane-labs }
+      responses:
+        '201': { description: Registered }
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { description: Rate limited }
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login to an organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, organizationSlug]
+              properties:
+                email: { type: string, example: alice@taskflow.test }
+                password: { type: string, example: Password123! }
+                organizationSlug: { type: string, example: acme }
+      responses:
+        '200': { description: Login successful }
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { description: Rate limited }
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Rotate refresh token and issue a new token pair
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: Token pair refreshed }
+        '401': { description: Invalid/revoked refresh token }
+        '429': { description: Rate limited }
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke a refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200': { description: Logged out }
+        '429': { description: Rate limited }
+
+  /auth/logout-all:
+    post:
+      tags: [Authentication]
+      summary: Revoke all refresh tokens for the current user in the current organization
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: All sessions revoked }
+
+  /members:
+    get:
+      tags: [Members]
+      summary: List members in the authenticated organization
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Member list }
+    post:
+      tags: [Members]
+      summary: Add a member (org_admin only)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                name: { type: string }
+                email: { type: string, format: email }
+                password: { type: string }
+                role:
+                  type: string
+                  enum: [org_admin, member]
+      responses:
+        '201': { description: Member added }
+        '403': { description: Admin role required }
+
+  /members/{userId}:
+    patch:
+      tags: [Members]
+      summary: Change member role (org_admin only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [org_admin, member]
+      responses:
+        '200': { description: Role updated }
+    delete:
+      tags: [Members]
+      summary: Remove member (org_admin only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Member removed }
+
+  /projects:
+    get:
+      tags: [Projects]
+      summary: List projects with offset pagination
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20, maximum: 100 }
+      responses:
+        '200':
+          description: Paginated project list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Project' }
+                  total: { type: integer }
+                  page: { type: integer }
+                  limit: { type: integer }
+    post:
+      tags: [Projects]
+      summary: Create project
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                description: { type: string, nullable: true }
+      responses:
+        '201': { description: Project created }
+
+  /projects/{id}:
+    get:
+      tags: [Projects]
+      summary: Get project
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Project }
+        '403': { description: Cross-tenant/inaccessible project }
+    put:
+      tags: [Projects]
+      summary: Update project
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string, nullable: true }
+      responses:
+        '200': { description: Project updated }
+    delete:
+      tags: [Projects]
+      summary: Soft-delete project (org_admin only)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Project deleted }
+        '403': { description: Admin role required or cross-tenant }
+
+  /projects/{id}/dashboard:
+    get:
+      tags: [Projects]
+      summary: Task counts grouped by status
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Dashboard counts }
+
+  /tasks:
+    get:
+      tags: [Tasks]
+      summary: List/filter/search tasks with offset pagination
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: page
+          schema: { type: integer, default: 1 }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 20 }
+        - in: query
+          name: status
+          schema: { type: string, enum: [todo, in_progress, review, done] }
+        - in: query
+          name: priority
+          schema: { type: string, enum: [low, medium, high, urgent] }
+        - in: query
+          name: assigneeId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: projectId
+          schema: { type: string, format: uuid }
+        - in: query
+          name: dueFrom
+          schema: { type: string, format: date-time }
+        - in: query
+          name: dueTo
+          schema: { type: string, format: date-time }
+        - in: query
+          name: search
+          description: PostgreSQL full-text search on title + description
+          schema: { type: string }
+      responses:
+        '200': { description: Paginated tasks }
+    post:
+      tags: [Tasks]
+      summary: Create task
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [projectId, title]
+              properties:
+                projectId: { type: string, format: uuid }
+                title: { type: string }
+                description: { type: string, nullable: true }
+                status: { type: string, enum: [todo, in_progress, review, done], default: todo }
+                priority: { type: string, enum: [low, medium, high, urgent], default: medium }
+                dueDate: { type: string, format: date-time, nullable: true }
+      responses:
+        '201': { description: Task created }
+
+  /tasks/{id}:
+    get:
+      tags: [Tasks]
+      summary: Get task
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Task }
+        '403': { description: Cross-tenant/inaccessible task }
+    put:
+      tags: [Tasks]
+      summary: Update task
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Task' }
+      responses:
+        '200': { description: Task updated }
+    delete:
+      tags: [Tasks]
+      summary: Soft-delete task
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Task deleted }
+
+  /tasks/{id}/assignments:
+    post:
+      tags: [Tasks]
+      summary: Assign a user and enqueue notification
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId]
+              properties:
+                userId: { type: string, format: uuid }
+      responses:
+        '201': { description: Assignment persisted and email job queued }
+        '400': { description: User not in same organization }
+        '503': { description: Queue failed and assignment was compensated/removed }
+
+  /tasks/{id}/assignments/{userId}:
+    delete:
+      tags: [Tasks]
+      summary: Unassign user from task
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: userId
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Unassigned }
+
+  /tasks/bulk/status:
+    patch:
+      tags: [Tasks]
+      summary: Bulk update task status
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [taskIds, status]
+              properties:
+                taskIds:
+                  type: array
+                  items: { type: string, format: uuid }
+                status:
+                  type: string
+                  enum: [todo, in_progress, review, done]
+      responses:
+        '200': { description: Tasks updated }
+
+  /jobs/{id}:
+    get:
+      tags: [Jobs]
+      summary: Read async email job status
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Job status (pending, active, completed or failed)
+        '403': { description: Job belongs to another organization }
+        '404': { description: Job not found }

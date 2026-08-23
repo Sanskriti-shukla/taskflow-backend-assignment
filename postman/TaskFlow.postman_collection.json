@@ -1,0 +1,330 @@
+{
+  "info": {
+    "name": "TaskFlow API - Assignment Demo",
+    "_postman_id": "9f3c6b5c-8eb4-4c42-8b55-taskflowdemo",
+    "description": "Import and run after docker compose up --build. Variables are captured automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "projectId",
+      "value": ""
+    },
+    {
+      "key": "taskId",
+      "value": ""
+    },
+    {
+      "key": "memberUserId",
+      "value": ""
+    },
+    {
+      "key": "jobId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "01 Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('200 OK', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 Login - Acme Admin",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"alice@taskflow.test\",\n  \"password\": \"Password123!\",\n  \"organizationSlug\": \"acme\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/login"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('login succeeds', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('accessToken', body.tokens.accessToken);",
+              "pm.collectionVariables.set('refreshToken', body.tokens.refreshToken);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 List Projects",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/projects?page=1&limit=20"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('projects listed', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "if (body.data && body.data.length) pm.collectionVariables.set('projectId', body.data[0].id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 List Members",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/members"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('members listed', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "const member = body.find(x => x.role === 'member') || body[0];",
+              "if (member) pm.collectionVariables.set('memberUserId', member.userId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 Create Task",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"projectId\": \"{{projectId}}\",\n  \"title\": \"Postman Demo Task {{$timestamp}}\",\n  \"description\": \"Demonstrates validation, tenancy, queue assignment and search\",\n  \"status\": \"todo\",\n  \"priority\": \"urgent\",\n  \"dueDate\": \"2026-08-24T03:30:00.000Z\"\n}"
+        },
+        "url": "{{baseUrl}}/tasks"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('task created', () => pm.response.to.have.status(201));",
+              "pm.collectionVariables.set('taskId', pm.response.json().id);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 Filter + Search Tasks",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/tasks?page=1&limit=20&priority=urgent&search=Postman"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('task filter works', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 Assign Task + Enqueue Email",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{memberUserId}}\"\n}"
+        },
+        "url": "{{baseUrl}}/tasks/{{taskId}}/assignments"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('assignment enqueued', () => pm.response.to.have.status(201));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('jobId', body.notification.jobId);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 Get Job Status",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/jobs/{{jobId}}"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('job status endpoint works', () => pm.response.to.have.status(200));",
+              "pm.expect(['pending','active','completed','failed']).to.include(pm.response.json().status);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "09 Project Dashboard",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{accessToken}}"
+          }
+        ],
+        "url": "{{baseUrl}}/projects/{{projectId}}/dashboard"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('dashboard succeeds', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "10 Refresh Token Rotation",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/refresh"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('refresh succeeds', () => pm.response.to.have.status(200));",
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('accessToken', body.accessToken);",
+              "pm.collectionVariables.set('refreshToken', body.refreshToken);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "11 Logout",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+        },
+        "url": "{{baseUrl}}/auth/logout"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('logout succeeds', () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

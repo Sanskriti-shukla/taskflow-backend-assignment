@@ -1,0 +1,21 @@
+module.exports = Object.freeze({
+    SUCCESS: 'Success',
+    REGISTER_SUCCESSFULLY: 'User registered successfully',
+    LOGIN_SUCCESSFULLY: 'Login successful',
+    LOGOUT_SUCCESSFULLY: 'Logout successful',
+    TOKEN_REFRESHED: 'Token refreshed successfully',
+    PROJECT_CREATED: 'Project created successfully',
+    PROJECT_UPDATED: 'Project updated successfully',
+    PROJECT_DELETED: 'Project deleted successfully',
+    TASK_CREATED: 'Task created successfully',
+    TASK_UPDATED: 'Task updated successfully',
+    TASK_DELETED: 'Task deleted successfully',
+    ASSIGNMENT_CREATED: 'Task assigned successfully',
+    ASSIGNMENT_DELETED: 'Task unassigned successfully',
+    MEMBER_CREATED: 'Member added successfully',
+    MEMBER_UPDATED: 'Member updated successfully',
+    MEMBER_DELETED: 'Member removed successfully',
+    UNAUTHORIZED_TOKEN: 'Unauthorized token',
+    FORBIDDEN: 'Forbidden',
+    INTERNAL_ERROR: 'Something went wrong'
+});

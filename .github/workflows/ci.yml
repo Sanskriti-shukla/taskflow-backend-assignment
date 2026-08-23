@@ -1,0 +1,58 @@
+name: TaskFlow CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: taskflow_test
+          POSTGRES_USER: taskflow
+          POSTGRES_PASSWORD: taskflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U taskflow -d taskflow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      DB_TEST_NAME: taskflow_test
+      DB_USERNAME: taskflow
+      DB_PASSWORD: taskflow
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_DIALECT: postgres
+      DB_LOGGING: false
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      SECRET_KEY: taskflow_access_secret_ci_1234567890
+      REFRESH_SECRET_KEY: taskflow_refresh_secret_ci_1234567890
+      ACCESS_TOKEN_TTL: 15m
+      REFRESH_TOKEN_TTL: 7d
+      BCRYPT_COST: 12
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install
+      - run: npm test
